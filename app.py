@@ -6,40 +6,32 @@ from datetime import date
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, func
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
-from sqlalchemy.engine import URL
 
-#
 # =================================================
-# 🔹 BASE DE DATOS (DINÁMICA Y SEGURA)
+# 🔹 BASE DE DATOS
 # =================================================
 
 database_url = os.environ.get("DATABASE_URL")
 
-# fallback local si estás probando en tu máquina
 if not database_url:
     database_url = "sqlite:///prestamos.db"
 
-# Si la URL viene con "postgres://", SQLAlchemy requiere "postgresql://"
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
 
-# Configuración del Engine
+# Engine
 if database_url.startswith("sqlite"):
     engine = create_engine(
         database_url,
         connect_args={"check_same_thread": False}
     )
 else:
-    # Lee dinámicamente cualquier URL limpia o IP directa que configures en Render
     engine = create_engine(
-    database_url,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=5,
-    max_overflow=10,
-    connect_args={"sslmode": "require"},
-)
-
+        database_url,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        connect_args={"sslmode": "require"},
+    )
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -72,22 +64,20 @@ class Pago(Base):
     capital_pagado = Column(Float)
 
 
-# crear tablas
+# Crear tablas (protegido)
 try:
     Base.metadata.create_all(engine)
 except Exception as e:
-    print("Error conectando a la base de datos:", e)
+    print("Error DB:", e)
+
 
 # =================================================
-# 🔹 SESIÓN SEGURA (IMPORTANTE EN STREAMLIT)
+# 🔹 FUNCIONES
 # =================================================
 
 def get_session():
     return SessionLocal()
 
-# =================================================
-# 🔹 FUNCIONES
-# =================================================
 
 def meses_totales(fecha_inicio):
     hoy = date.today()
@@ -133,13 +123,10 @@ def calcular_estado(session, prestamo_id):
     tasa = p.tasa or 0
     fecha_inicio = date.fromisoformat(p.fecha_inicio)
 
-    hoy = str(date.today())
-
     total_capital_pagado = session.query(
         func.sum(Pago.capital_pagado)
     ).filter(
-        Pago.prestamo_id == prestamo_id,
-        Pago.fecha <= hoy
+        Pago.prestamo_id == prestamo_id
     ).scalar() or 0
 
     capital_real = max(0, capital_inicial - total_capital_pagado)
@@ -201,8 +188,9 @@ def eliminar_prestamo(session, prestamo_id):
         session.delete(p)
         session.commit()
 
+
 # =================================================
-# 🔹 UI STREAMLIT
+# 🔹 UI
 # =================================================
 
 st.set_page_config(page_title="Sistema de Préstamos", layout="wide")
@@ -212,18 +200,27 @@ menu = st.sidebar.radio("Menú", [
     "Resumen",
     "Nuevo préstamo",
     "Registrar pago",
-    "Editar pago",
     "Eliminar préstamo",
 ])
 
-# sesión por request
 session = get_session()
 
-# ---------------- RESUMEN ----------------
+# =================================================
+# ✅ RESUMEN (CON MÉTRICAS)
+# =================================================
+
 if menu == "Resumen":
     prestamos = session.query(Prestamo).all()
 
     data = []
+
+    total_deuda = 0
+    total_interes_mensual = 0
+    total_recaudado_mes = 0
+
+    hoy = date.today()
+    mes_actual = hoy.strftime("%Y-%m")
+
     for p in prestamos:
         deuda_interes, capital_real, interes_mensual = calcular_estado(session, p.id)
 
@@ -235,9 +232,30 @@ if menu == "Resumen":
             "Total deuda": capital_real + deuda_interes
         })
 
+        total_deuda += capital_real + deuda_interes
+        total_interes_mensual += interes_mensual
+
+        pagos_mes = session.query(func.sum(Pago.monto)).filter(
+            Pago.prestamo_id == p.id,
+            Pago.fecha.like(f"{mes_actual}%")
+        ).scalar() or 0
+
+        total_recaudado_mes += pagos_mes
+
+    # 🔥 MÉTRICAS
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("💵 Ganancia mensual", round(total_interes_mensual, 2))
+    col2.metric("📥 Recaudado este mes", round(total_recaudado_mes, 2))
+    col3.metric("📊 Deuda total", round(total_deuda, 2))
+
     st.dataframe(pd.DataFrame(data))
 
-# ---------------- NUEVO PRÉSTAMO ----------------
+
+# =================================================
+# NUEVO PRÉSTAMO
+# =================================================
+
 elif menu == "Nuevo préstamo":
     cliente = st.text_input("Cliente")
     monto = st.number_input("Monto", min_value=0.0)
@@ -255,7 +273,11 @@ elif menu == "Nuevo préstamo":
         session.commit()
         st.success("Préstamo creado")
 
-# ---------------- REGISTRAR PAGO ----------------
+
+# =================================================
+# REGISTRAR PAGO
+# =================================================
+
 elif menu == "Registrar pago":
     prestamos = session.query(Prestamo).all()
 
@@ -272,16 +294,15 @@ elif menu == "Registrar pago":
         if st.button("Aplicar pago"):
             eliminado = aplicar_pago(session, pid, cap, intp, fecha)
             if eliminado:
-                st.success("Préstamo eliminado (pagado)")
+                st.success("Préstamo eliminado")
             else:
                 st.success("Pago registrado")
 
-# ---------------- EDITAR PAGO ----------------
-elif menu == "Editar pago":
-    pagos = session.query(Pago).all()
-    st.write(pagos)
 
-# ---------------- ELIMINAR PRÉSTAMO ----------------
+# =================================================
+# ELIMINAR
+# =================================================
+
 elif menu == "Eliminar préstamo":
     prestamos = session.query(Prestamo).all()
 
