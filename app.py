@@ -2,34 +2,48 @@ import os
 import calendar
 import streamlit as st
 import pandas as pd
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, func
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy.engine import URL
 
 # =================================================
-# 🔹 BASE DE DATOS (CORREGIDO)
+# 🔹 BASE DE DATOS (CORREGIDO Y SEGURO)
 # =================================================
 
-database_url = os.environ.get("DATABASE_URL", "sqlite:///prestamos.db")
+database_url = os.environ.get("DATABASE_URL")
 
-engine_kwargs = {}
+# fallback local
+if not database_url:
+    database_url = "sqlite:///prestamos.db"
 
+# ENGINE seguro
 if database_url.startswith("sqlite"):
-    engine_kwargs["connect_args"] = {"check_same_thread": False}
+    engine = create_engine(
+        database_url,
+        connect_args={"check_same_thread": False}
+    )
 else:
-    engine_kwargs.update({
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-        "pool_size": 5,
-        "max_overflow": 10,
-    })
-
-engine = create_engine(database_url, **engine_kwargs)
+    # 🔥 FIX CRÍTICO: evita errores de encoding en Supabase
+    engine = create_engine(
+        URL.create(
+            drivername="postgresql+psycopg2",
+            username="postgres",
+            password="100$Jesus7437",  # puedes mover esto a env si quieres
+            host="db.lfmdnlrnwlrtymkmtiya.supabase.co",
+            port=5432,
+            database="postgres",
+            query={"sslmode": "require"}
+        ),
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=5,
+        max_overflow=10,
+    )
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
-session = SessionLocal()
 
 # =================================================
 # 🔹 MODELOS
@@ -59,7 +73,15 @@ class Pago(Base):
     capital_pagado = Column(Float)
 
 
+# crear tablas
 Base.metadata.create_all(engine)
+
+# =================================================
+# 🔹 SESIÓN SEGURA (IMPORTANTE EN STREAMLIT)
+# =================================================
+
+def get_session():
+    return SessionLocal()
 
 # =================================================
 # 🔹 FUNCIONES
@@ -82,17 +104,7 @@ def add_months(fecha, meses):
     return date(año, mes, dia)
 
 
-def prox_fecha_pago(fecha_inicio):
-    fecha_inicio = date.fromisoformat(fecha_inicio)
-    meses = meses_totales(str(fecha_inicio))
-    prox = add_months(fecha_inicio, meses)
-    hoy = date.today()
-    if prox < hoy:
-        prox = add_months(fecha_inicio, meses + 1)
-    return prox
-
-
-def recalcular_prestamo(prestamo_id):
+def recalcular_prestamo(session, prestamo_id):
     p = session.get(Prestamo, prestamo_id)
     if not p:
         return
@@ -110,7 +122,7 @@ def recalcular_prestamo(prestamo_id):
     session.commit()
 
 
-def calcular_estado(prestamo_id):
+def calcular_estado(session, prestamo_id):
     p = session.get(Prestamo, prestamo_id)
     if not p:
         return 0, 0, 0
@@ -158,7 +170,7 @@ def calcular_estado(prestamo_id):
     return deuda_interes, capital_real, interes_mensual
 
 
-def aplicar_pago(prestamo_id, monto_capital, monto_interes, fecha_pago):
+def aplicar_pago(session, prestamo_id, monto_capital, monto_interes, fecha_pago):
     pago = Pago(
         prestamo_id=prestamo_id,
         fecha=str(fecha_pago),
@@ -170,7 +182,7 @@ def aplicar_pago(prestamo_id, monto_capital, monto_interes, fecha_pago):
     session.add(pago)
     session.commit()
 
-    recalcular_prestamo(prestamo_id)
+    recalcular_prestamo(session, prestamo_id)
 
     p = session.get(Prestamo, prestamo_id)
     if p and p.capital_actual == 0:
@@ -181,7 +193,7 @@ def aplicar_pago(prestamo_id, monto_capital, monto_interes, fecha_pago):
     return False
 
 
-def eliminar_prestamo(prestamo_id):
+def eliminar_prestamo(session, prestamo_id):
     p = session.get(Prestamo, prestamo_id)
     if p:
         session.delete(p)
@@ -202,14 +214,16 @@ menu = st.sidebar.radio("Menú", [
     "Eliminar préstamo",
 ])
 
+# sesión por request
+session = get_session()
+
 # ---------------- RESUMEN ----------------
 if menu == "Resumen":
     prestamos = session.query(Prestamo).all()
 
     data = []
-
     for p in prestamos:
-        deuda_interes, capital_real, interes_mensual = calcular_estado(p.id)
+        deuda_interes, capital_real, interes_mensual = calcular_estado(session, p.id)
 
         data.append({
             "Cliente": p.cliente,
@@ -254,7 +268,7 @@ elif menu == "Registrar pago":
         fecha = st.date_input("Fecha")
 
         if st.button("Aplicar pago"):
-            eliminado = aplicar_pago(pid, cap, intp, fecha)
+            eliminado = aplicar_pago(session, pid, cap, intp, fecha)
             if eliminado:
                 st.success("Préstamo eliminado (pagado)")
             else:
@@ -276,5 +290,5 @@ elif menu == "Eliminar préstamo":
         pid = opciones[sel]
 
         if st.button("Eliminar"):
-            eliminar_prestamo(pid)
+            eliminar_prestamo(session, pid)
             st.success("Eliminado")
