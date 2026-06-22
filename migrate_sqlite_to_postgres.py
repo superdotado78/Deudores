@@ -58,7 +58,7 @@ def main():
         # Copiar prestamos
         print('Copiando prestamos...')
         result = sconn.execute(select(prestamos))
-        rows = [dict(r) for r in result]
+        rows = [r._asdict() for r in result]
         if rows:
             dconn.execute(prestamos.insert(), rows)
             print(f'Insertadas {len(rows)} filas en prestamos')
@@ -68,7 +68,7 @@ def main():
         # Copiar pagos
         print('Copiando pagos...')
         result = sconn.execute(select(pagos))
-        rows = [dict(r) for r in result]
+        rows = [r._asdict() for r in result]
         if rows:
             dconn.execute(pagos.insert(), rows)
             print(f'Insertadas {len(rows)} filas en pagos')
