@@ -1,0 +1,39 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+prestamos.db
+.env
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.vscode/
+.DS_Store
+*.log
+__pycache__/
+coverage/
+htmlcov/
+pip-wheel-metadata/
+.Python
+
+# Docker
+*.log
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs
+*.swp
+*.swo
+/.idea/
+/.vscode/
