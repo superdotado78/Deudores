@@ -8,34 +8,31 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.engine import URL
 
+#
 # =================================================
-# 🔹 BASE DE DATOS (CORREGIDO Y SEGURO)
+# 🔹 BASE DE DATOS (DINÁMICA Y SEGURA)
 # =================================================
 
 database_url = os.environ.get("DATABASE_URL")
 
-# fallback local
+# fallback local si estás probando en tu máquina
 if not database_url:
     database_url = "sqlite:///prestamos.db"
 
-# ENGINE seguro
+# Si la URL viene con "postgres://", SQLAlchemy requiere "postgresql://"
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+# Configuración del Engine
 if database_url.startswith("sqlite"):
     engine = create_engine(
         database_url,
         connect_args={"check_same_thread": False}
     )
 else:
-    # 🔥 FIX CRÍTICO: evita errores de encoding en Supabase
+    # Lee dinámicamente cualquier URL limpia o IP directa que configures en Render
     engine = create_engine(
-        URL.create(
-            drivername="postgresql+psycopg2",
-            username="postgres",
-            password="100$Jesus7437",  # puedes mover esto a env si quieres
-            host="db.lfmdnlrnwlrtymkmtiya.supabase.co",
-            port=5432,
-            database="postgres",
-            query={"sslmode": "require"}
-        ),
+        database_url,
         pool_pre_ping=True,
         pool_recycle=300,
         pool_size=5,
