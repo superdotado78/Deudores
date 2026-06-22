@@ -213,10 +213,8 @@ if menu == "Resumen":
     prestamos = session.query(Prestamo).all()
 
     data = []
-
     total_deuda = 0
     total_interes_mensual = 0
-    total_recaudado_mes = 0
 
     hoy = date.today()
     mes_actual = hoy.strftime("%Y-%m")
@@ -226,30 +224,29 @@ if menu == "Resumen":
 
         data.append({
             "Cliente": p.cliente,
-            "Capital": capital_real,
-            "Interés mensual": interes_mensual,
-            "Interés pendiente": deuda_interes,
-            "Total deuda": capital_real + deuda_interes
+            "Capital": round(capital_real, 2),
+            "Interés mensual": round(interes_mensual, 2),
+            "Interés pendiente": round(deuda_interes, 2),
+            "Total deuda": round(capital_real + deuda_interes, 2)
         })
 
         total_deuda += capital_real + deuda_interes
         total_interes_mensual += interes_mensual
 
-        pagos_mes = session.query(func.sum(Pago.monto)).filter(
-            Pago.prestamo_id == p.id,
-            Pago.fecha.like(f"{mes_actual}%")
-        ).scalar() or 0
+    total_recaudado_mes = session.query(func.sum(Pago.monto)).filter(
+        func.substr(Pago.fecha, 1, 7) == mes_actual
+    ).scalar() or 0
 
-        total_recaudado_mes += pagos_mes
-
-    # 🔥 MÉTRICAS
     col1, col2, col3 = st.columns(3)
 
-    col1.metric("💵 Ganancia mensual", round(total_interes_mensual, 2))
-    col2.metric("📥 Recaudado este mes", round(total_recaudado_mes, 2))
-    col3.metric("📊 Deuda total", round(total_deuda, 2))
+    col1.metric("💵 Ganancia mensual", f"${total_interes_mensual:,.2f}")
+    col2.metric("📥 Recaudado este mes", f"${total_recaudado_mes:,.2f}")
+    col3.metric("📊 Deuda total", f"${total_deuda:,.2f}")
 
-    st.dataframe(pd.DataFrame(data))
+    if data:
+        st.dataframe(pd.DataFrame(data))
+    else:
+        st.info("No hay préstamos registrados aún.")
 
 
 # =================================================
