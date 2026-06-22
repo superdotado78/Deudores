@@ -32,12 +32,14 @@ if database_url.startswith("sqlite"):
 else:
     # Lee dinámicamente cualquier URL limpia o IP directa que configures en Render
     engine = create_engine(
-        database_url,
-        pool_pre_ping=True,
-        pool_recycle=300,
-        pool_size=5,
-        max_overflow=10,
-    )
+    database_url,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    pool_size=5,
+    max_overflow=10,
+    connect_args={"sslmode": "require"},
+)
+
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -71,7 +73,10 @@ class Pago(Base):
 
 
 # crear tablas
-Base.metadata.create_all(engine)
+try:
+    Base.metadata.create_all(engine)
+except Exception as e:
+    print("Error conectando a la base de datos:", e)
 
 # =================================================
 # 🔹 SESIÓN SEGURA (IMPORTANTE EN STREAMLIT)
