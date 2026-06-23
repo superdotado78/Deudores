@@ -215,7 +215,7 @@ menu = st.sidebar.radio("Menú", [
     "Editar préstamo",
     "Editar pago",
     "Eliminar préstamo",
-])
+], key="menu")
 
 session = get_session()
 
@@ -303,23 +303,71 @@ elif menu == "Nuevo préstamo":
 
 elif menu == "Registrar pago":
     prestamos = session.query(Prestamo).all()
-
-    opciones = {f"{p.cliente} (ID {p.id})": p.id for p in prestamos}
+    # Construir opciones mostrando estado: cliente, capital actual e interés pendiente
+    opciones = {}
+    estado_map = {}
+    for p in prestamos:
+        deuda_interes, capital_real, interes_mensual = calcular_estado(session, p.id)
+        label = f"{p.cliente} | Capital: ${capital_real:.2f} | Interés pendiente: ${deuda_interes:.2f} (ID {p.id})"
+        opciones[label] = p.id
+        estado_map[p.id] = {
+            "deuda_interes": round(deuda_interes, 2),
+            "capital_real": round(capital_real, 2),
+            "interes_mensual": round(interes_mensual, 2)
+        }
 
     if opciones:
         sel = st.selectbox("Préstamo", list(opciones.keys()))
         pid = opciones[sel]
 
-        cap = st.number_input("Capital", min_value=0.0)
-        intp = st.number_input("Interés", min_value=0.0)
+        estado = estado_map.get(pid, {})
+
+        st.info(f"Cliente: {sel.split('|')[0].strip()}")
+        st.write(f"- Capital actual: ${estado.get('capital_real', 0):,.2f}")
+        st.write(f"- Interés pendiente: ${estado.get('deuda_interes', 0):,.2f}")
+        st.write(f"- Interés mensual estimado: ${estado.get('interes_mensual', 0):,.2f}")
+        st.divider()
+
+        # Campos para registrar pago (sugerir interés pendiente en el campo)
+        cap = st.number_input("Capital", min_value=0.0, value=0.0)
+        intp = st.number_input("Interés", min_value=0.0, value=estado.get('deuda_interes', 0.0))
         fecha = st.date_input("Fecha")
 
-        if st.button("Aplicar pago"):
-            eliminado = aplicar_pago(session, pid, cap, intp, fecha)
-            if eliminado:
-                st.success("Préstamo eliminado")
-            else:
-                st.success("Pago registrado")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Aplicar pago"):
+                eliminado = aplicar_pago(session, pid, cap, intp, fecha)
+                if eliminado:
+                    st.success("Préstamo eliminado")
+                else:
+                    st.success("Pago registrado")
+
+                st.divider()
+                st.write("¿Desea realizar otro pago?")
+                c_yes, c_no = st.columns(2)
+                if c_yes.button("Sí, realizar otro pago"):
+                    st.experimental_rerun()
+                if c_no.button("No, mostrar resumen"):
+                    st.session_state['menu'] = 'Resumen'
+                    st.experimental_rerun()
+        with col2:
+            if st.button("Pagar total (efectuar pago completo)", type="secondary"):
+                cap_total = estado.get('capital_real', 0.0)
+                int_total = estado.get('deuda_interes', 0.0)
+                eliminado = aplicar_pago(session, pid, cap_total, int_total, fecha)
+                if eliminado:
+                    st.success("Préstamo eliminado")
+                else:
+                    st.success("Pago total registrado")
+
+                st.divider()
+                st.write("¿Desea realizar otro pago?")
+                c_yes2, c_no2 = st.columns(2)
+                if c_yes2.button("Sí, realizar otro pago"):
+                    st.experimental_rerun()
+                if c_no2.button("No, mostrar resumen"):
+                    st.session_state['menu'] = 'Resumen'
+                    st.experimental_rerun()
 
 
 # =================================================
