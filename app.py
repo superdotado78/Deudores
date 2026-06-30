@@ -311,9 +311,9 @@ elif menu == "Registrar pago":
         label = f"{p.cliente} | Capital: ${capital_real:.2f} | Interés pendiente: ${deuda_interes:.2f} (ID {p.id})"
         opciones[label] = p.id
         estado_map[p.id] = {
-            "deuda_interes": round(deuda_interes, 2),
-            "capital_real": round(capital_real, 2),
-            "interes_mensual": round(interes_mensual, 2)
+            "deuda_interes": float(round(deuda_interes, 2)),
+            "capital_real": float(round(capital_real, 2)),
+            "interes_mensual": float(round(interes_mensual, 2))
         }
 
     if opciones:
@@ -330,7 +330,7 @@ elif menu == "Registrar pago":
 
         # Campos para registrar pago (sugerir interés pendiente en el campo)
         cap = st.number_input("Capital", min_value=0.0, value=0.0)
-        intp = st.number_input("Interés", min_value=0.0, value=estado.get('deuda_interes', 0.0))
+        intp = st.number_input("Interés", min_value=0.0, value=float(estado.get('deuda_interes', 0.0)))
         fecha = st.date_input("Fecha")
 
         col1, col2 = st.columns(2)
