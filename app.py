@@ -51,6 +51,7 @@ class Prestamo(Base):
     fecha_inicio = Column(String)
 
     pagos = relationship("Pago", cascade="all, delete-orphan", backref="prestamo")
+    interes_cambios = relationship("InteresCambio", cascade="all, delete-orphan", backref="prestamo")
 
 
 class Pago(Base):
@@ -62,6 +63,15 @@ class Pago(Base):
     monto = Column(Float)
     interes_pagado = Column(Float)
     capital_pagado = Column(Float)
+
+
+class InteresCambio(Base):
+    __tablename__ = "interes_cambios"
+
+    id = Column(Integer, primary_key=True)
+    prestamo_id = Column(Integer, ForeignKey("prestamos.id"))
+    tasa = Column(Float)
+    fecha_desde = Column(String)
 
 
 # Crear tablas (protegido)
@@ -79,11 +89,11 @@ def get_session():
     return SessionLocal()
 
 
-def meses_totales(fecha_inicio):
-    hoy = date.today()
+def meses_totales(fecha_inicio, fecha_corte=None):
+    fecha_corte = fecha_corte or date.today()
     f = date.fromisoformat(fecha_inicio)
-    meses = (hoy.year - f.year) * 12 + (hoy.month - f.month)
-    if hoy.day < f.day:
+    meses = (fecha_corte.year - f.year) * 12 + (fecha_corte.month - f.month)
+    if fecha_corte.day < f.day:
         meses -= 1
     return max(0, meses)
 
@@ -107,6 +117,76 @@ def prox_fecha_pago(fecha_inicio):
     return prox
 
 
+def obtener_tasa_para_periodo(periodo, tasa_original, tasa_nueva, fecha_vigencia):
+    if isinstance(periodo, str):
+        periodo = date.fromisoformat(periodo)
+
+    if isinstance(fecha_vigencia, str):
+        fecha_vigencia = date.fromisoformat(fecha_vigencia)
+
+    if fecha_vigencia is None:
+        return float(tasa_nueva if tasa_nueva is not None else (tasa_original or 0))
+
+    if periodo >= fecha_vigencia:
+        return float(tasa_nueva if tasa_nueva is not None else (tasa_original or 0))
+
+    return float(tasa_original or 0)
+
+
+def obtener_tasa_aplicable(session, prestamo_id, periodo):
+    p = session.get(Prestamo, prestamo_id)
+    if not p:
+        return 0.0
+
+    cambios = session.query(InteresCambio).filter(
+        InteresCambio.prestamo_id == prestamo_id
+    ).order_by(InteresCambio.fecha_desde).all()
+
+    if not cambios:
+        return float(p.tasa or 0)
+
+    tasa_aplicable = None
+    for cambio in cambios:
+        fecha_desde = cambio.fecha_desde
+        if not fecha_desde:
+            continue
+        fecha = date.fromisoformat(fecha_desde)
+        if periodo >= fecha:
+            tasa_aplicable = float(cambio.tasa or 0)
+        else:
+            break
+
+    if tasa_aplicable is None:
+        return float(p.tasa or 0)
+
+    return tasa_aplicable
+
+
+def asegurar_historial_tasas(session):
+    prestamos = session.query(Prestamo).all()
+    for p in prestamos:
+        if not session.query(InteresCambio).filter(InteresCambio.prestamo_id == p.id).first():
+            session.add(InteresCambio(
+                prestamo_id=p.id,
+                tasa=p.tasa or 0.0,
+                fecha_desde=p.fecha_inicio or str(date.today())
+            ))
+    session.commit()
+
+
+def inicializar_historial_tasas():
+    try:
+        session = get_session()
+        asegurar_historial_tasas(session)
+        session.close()
+    except Exception as e:
+        print("Error al asegurar historial de tasas:", e)
+
+
+if not os.environ.get("PYTEST_CURRENT_TEST"):
+    inicializar_historial_tasas()
+
+
 def recalcular_prestamo(session, prestamo_id):
     p = session.get(Prestamo, prestamo_id)
     if not p:
@@ -125,13 +205,69 @@ def recalcular_prestamo(session, prestamo_id):
     session.commit()
 
 
+def periodo_clave(fecha):
+    if isinstance(fecha, str):
+        fecha = date.fromisoformat(fecha)
+    return fecha.strftime("%Y-%m")
+
+
+def obtener_fecha_corte(session, prestamo_id):
+    ultimo_pago_con_capital = (
+        session.query(Pago.fecha)
+        .filter(Pago.prestamo_id == prestamo_id, Pago.capital_pagado > 0)
+        .order_by(Pago.fecha.desc())
+        .first()
+    )
+    if ultimo_pago_con_capital and ultimo_pago_con_capital[0]:
+        return date.fromisoformat(ultimo_pago_con_capital[0])
+
+    return None
+
+
+def aplicar_pagos_a_intereses(periodos, pagos):
+    saldos = [float(due) for _, due in periodos]
+
+    for fecha_pago, monto in sorted(pagos, key=lambda item: item[0]):
+        if monto <= 0:
+            continue
+
+        restante_pago = float(monto)
+        for idx, (periodo, _) in enumerate(periodos):
+            if periodo > fecha_pago:
+                continue
+            if restante_pago <= 0:
+                break
+            if saldos[idx] <= 0:
+                continue
+
+            if saldos[idx] >= restante_pago:
+                saldos[idx] -= restante_pago
+                restante_pago = 0
+            else:
+                restante_pago -= saldos[idx]
+                saldos[idx] = 0
+
+    return saldos
+
+
+def capital_pagado_hasta_periodo(pagos_capital, periodo):
+    if not pagos_capital:
+        return 0.0
+
+    periodo_key = periodo_clave(periodo)
+    total = 0.0
+    for pago in pagos_capital:
+        if periodo_clave(pago.fecha) <= periodo_key:
+            total += float(pago.capital_pagado or 0)
+    return total
+
+
 def calcular_estado(session, prestamo_id):
     p = session.get(Prestamo, prestamo_id)
     if not p:
         return 0, 0, 0
 
     capital_inicial = p.capital_inicial or 0
-    tasa = p.tasa or 0
     fecha_inicio = date.fromisoformat(p.fecha_inicio)
 
     total_capital_pagado = session.query(
@@ -141,31 +277,41 @@ def calcular_estado(session, prestamo_id):
     ).scalar() or 0
 
     capital_real = max(0, capital_inicial - total_capital_pagado)
-    interes_mensual = capital_real * (tasa / 100)
+    interes_mensual = capital_real * (obtener_tasa_aplicable(session, prestamo_id, date.today()) / 100)
 
-    meses_vencidos = meses_totales(str(fecha_inicio))
+    fecha_corte = obtener_fecha_corte(session, prestamo_id)
+    meses_vencidos = meses_totales(str(fecha_inicio), fecha_corte or date.today())
 
-    interes_acumulado = 0
+    if fecha_corte and fecha_corte < date.today():
+        if prox_fecha_pago(str(fecha_inicio)) <= date.today():
+            meses_vencidos = max(meses_vencidos, meses_totales(str(fecha_inicio), date.today()))
+    periodos = []
+    pagos_capital = session.query(Pago).filter(
+        Pago.prestamo_id == prestamo_id,
+        Pago.capital_pagado > 0
+    ).order_by(Pago.fecha).all()
+
+    capital_acumulado = 0.0
     for i in range(meses_vencidos):
         periodo = add_months(fecha_inicio, i + 1)
 
-        capital_hasta = session.query(
-            func.sum(Pago.capital_pagado)
-        ).filter(
-            Pago.prestamo_id == prestamo_id,
-            Pago.fecha <= str(periodo)
-        ).scalar() or 0
+        capital_acumulado += capital_pagado_hasta_periodo(pagos_capital, periodo) - capital_acumulado
+        capital_periodo = max(0, capital_inicial - capital_acumulado)
+        tasa_periodo = obtener_tasa_aplicable(session, prestamo_id, periodo)
+        interes_periodo = capital_periodo * (tasa_periodo / 100)
+        periodos.append((periodo, interes_periodo))
 
-        capital_periodo = max(0, capital_inicial - capital_hasta)
-        interes_acumulado += capital_periodo * (tasa / 100)
+    pagos_interes = session.query(Pago).filter(
+        Pago.prestamo_id == prestamo_id,
+        Pago.interes_pagado > 0
+    ).order_by(Pago.fecha).all()
 
-    interes_pagado = session.query(
-        func.sum(Pago.interes_pagado)
-    ).filter(
-        Pago.prestamo_id == prestamo_id
-    ).scalar() or 0
+    pagos = []
+    for pago in pagos_interes:
+        pagos.append((date.fromisoformat(pago.fecha), float(pago.interes_pagado or 0)))
 
-    deuda_interes = max(0, interes_acumulado - interes_pagado)
+    saldos = aplicar_pagos_a_intereses(periodos, pagos)
+    deuda_interes = sum(max(0, saldo) for saldo in saldos)
 
     return deuda_interes, capital_real, interes_mensual
 
@@ -206,6 +352,15 @@ def eliminar_prestamo(session, prestamo_id):
 
 st.set_page_config(page_title="Sistema de Préstamos", layout="wide")
 st.title("💰 Sistema de Préstamos")
+
+
+def ir_a_menu(nuevo_menu):
+    st.session_state["menu"] = nuevo_menu
+    st.rerun()
+
+
+if "menu" not in st.session_state:
+    st.session_state["menu"] = "Resumen"
 
 menu = st.sidebar.radio("Menú", [
     "Resumen",
@@ -294,6 +449,12 @@ elif menu == "Nuevo préstamo":
         )
         session.add(p)
         session.commit()
+        session.add(InteresCambio(
+            prestamo_id=p.id,
+            tasa=tasa,
+            fecha_desde=p.fecha_inicio,
+        ))
+        session.commit()
         st.success("Préstamo creado")
 
 
@@ -346,10 +507,9 @@ elif menu == "Registrar pago":
                 st.write("¿Desea realizar otro pago?")
                 c_yes, c_no = st.columns(2)
                 if c_yes.button("Sí, realizar otro pago"):
-                    st.experimental_rerun()
+                    st.rerun()
                 if c_no.button("No, mostrar resumen"):
-                    st.session_state['menu'] = 'Resumen'
-                    st.experimental_rerun()
+                    ir_a_menu("Resumen")
         with col2:
             if st.button("Pagar total (efectuar pago completo)", type="secondary"):
                 cap_total = estado.get('capital_real', 0.0)
@@ -364,10 +524,9 @@ elif menu == "Registrar pago":
                 st.write("¿Desea realizar otro pago?")
                 c_yes2, c_no2 = st.columns(2)
                 if c_yes2.button("Sí, realizar otro pago"):
-                    st.experimental_rerun()
+                    st.rerun()
                 if c_no2.button("No, mostrar resumen"):
-                    st.session_state['menu'] = 'Resumen'
-                    st.experimental_rerun()
+                    ir_a_menu("Resumen")
 
 
 # =================================================
@@ -484,13 +643,27 @@ elif menu == "Editar préstamo":
             nuevo_capital = st.number_input("Capital actual", value=prestamo.capital_actual or 0.0, min_value=0.0, step=0.01)
         with col2:
             nueva_tasa = st.number_input("Interés %", value=prestamo.tasa or 0.0, min_value=0.0, step=0.01)
-            nueva_fecha = st.date_input("Fecha de inicio", value=date.fromisoformat(prestamo.fecha_inicio))
+            st.info(f"Fecha de inicio actual: {prestamo.fecha_inicio}")
+            st.caption("La fecha de inicio del préstamo se conserva; el nuevo interés solo empieza a regir desde la fecha que elijas abajo.")
+            fecha_vigencia_tasa = st.date_input(
+                "Desde qué fecha rige este interés",
+                value=date.today(),
+                help="Los meses anteriores a esta fecha seguirán usando el interés anterior y solo los meses pendientes se recalcularán con el nuevo interés."
+            )
 
         if st.button("Guardar cambios"):
             prestamo.cliente = nuevo_cliente
             prestamo.capital_actual = nuevo_capital
+            tasa_anterior = prestamo.tasa or 0.0
             prestamo.tasa = nueva_tasa
-            prestamo.fecha_inicio = str(nueva_fecha)
+
+            if nueva_tasa != tasa_anterior:
+                session.add(InteresCambio(
+                    prestamo_id=prestamo.id,
+                    tasa=nueva_tasa,
+                    fecha_desde=str(fecha_vigencia_tasa),
+                ))
+
             session.commit()
             st.success("Préstamo actualizado correctamente")
     else:
