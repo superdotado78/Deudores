@@ -32,11 +32,13 @@ class TasaPorPeriodoTests(unittest.TestCase):
 
         self.assertEqual(app.aplicar_pagos_a_intereses(periodos, pagos), [0.0])
 
-    def test_no_aplica_pago_antes_de_la_fecha_de_vencimiento(self):
+    def test_pago_antes_del_vencimiento_si_se_aplica(self):
+        """Un pago de interés antes de la fecha de vencimiento sí debe aplicarse
+        al periodo correspondiente (pago adelantado)."""
         periodos = [(date(2026, 5, 26), 100.0)]
         pagos = [(date(2026, 5, 6), 100.0)]
 
-        self.assertEqual(app.aplicar_pagos_a_intereses(periodos, pagos), [100.0])
+        self.assertEqual(app.aplicar_pagos_a_intereses(periodos, pagos), [0.0])
 
     def test_meses_totales_usa_la_fecha_de_corte(self):
         self.assertEqual(app.meses_totales("2026-05-01", date(2026, 6, 15)), 1)
@@ -119,7 +121,8 @@ class TasaPorPeriodoTests(unittest.TestCase):
         finally:
             session.close()
 
-    def test_un_pago_con_abono_a_capital_no_deja_interes_pendiente(self):
+    def test_un_pago_con_abono_a_capital_deja_interes_del_mes_siguiente(self):
+        """Si hay un pago en junio y hoy es julio, debe haber interés pendiente de junio."""
         session = app.get_session()
         try:
             class FrozenDate(date):
@@ -151,7 +154,9 @@ class TasaPorPeriodoTests(unittest.TestCase):
             with patch.object(app, "date", FrozenDate):
                 deuda_interes, _, _ = app.calcular_estado(session, prestamo.id)
 
-            self.assertAlmostEqual(deuda_interes, 0.0)
+            # Periodo 1 (mayo): capital $500, interés $75 -> pagado
+            # Periodo 2 (junio): capital $400, interés $60 -> NO pagado
+            self.assertAlmostEqual(deuda_interes, 60.0)
         finally:
             session.close()
 

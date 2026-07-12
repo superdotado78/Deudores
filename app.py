@@ -232,9 +232,7 @@ def aplicar_pagos_a_intereses(periodos, pagos):
             continue
 
         restante_pago = float(monto)
-        for idx, (periodo, _) in enumerate(periodos):
-            if periodo > fecha_pago:
-                continue
+        for idx in range(len(periodos)):
             if restante_pago <= 0:
                 break
             if saldos[idx] <= 0:
@@ -257,7 +255,7 @@ def capital_pagado_hasta_periodo(pagos_capital, periodo):
     periodo_key = periodo_clave(periodo)
     total = 0.0
     for pago in pagos_capital:
-        if periodo_clave(pago.fecha) <= periodo_key:
+        if periodo_clave(pago.fecha) < periodo_key:
             total += float(pago.capital_pagado or 0)
     return total
 
@@ -283,8 +281,7 @@ def calcular_estado(session, prestamo_id):
     meses_vencidos = meses_totales(str(fecha_inicio), fecha_corte or date.today())
 
     if fecha_corte and fecha_corte < date.today():
-        if prox_fecha_pago(str(fecha_inicio)) <= date.today():
-            meses_vencidos = max(meses_vencidos, meses_totales(str(fecha_inicio), date.today()))
+        meses_vencidos = max(meses_vencidos, meses_totales(str(fecha_inicio), date.today()))
     periodos = []
     pagos_capital = session.query(Pago).filter(
         Pago.prestamo_id == prestamo_id,
@@ -367,6 +364,7 @@ menu = st.sidebar.radio("Menú", [
     "Nuevo préstamo",
     "Registrar pago",
     "Historial mensual",
+    "Historial cliente",
     "Editar préstamo",
     "Editar pago",
     "Eliminar préstamo",
@@ -436,8 +434,20 @@ if menu == "Resumen":
 
 elif menu == "Nuevo préstamo":
     cliente = st.text_input("Cliente")
-    monto = st.number_input("Monto", min_value=0.0)
-    tasa = st.number_input("Interés %", min_value=0.0)
+    monto = st.number_input(
+            "Monto",
+    min_value=0.0
+    )
+    tasa = st.number_input(
+        "Interés %",
+        min_value=0.0
+    )
+
+    fecha_inicio = st.date_input(
+        "Fecha de inicio del préstamo",
+        value=date.today(),
+        help="Por defecto se usa hoy, pero puedes seleccionar una fecha anterior."
+    )
 
     if st.button("Guardar"):
         p = Prestamo(
@@ -445,7 +455,7 @@ elif menu == "Nuevo préstamo":
             capital_inicial=monto,
             capital_actual=monto,
             tasa=tasa,
-            fecha_inicio=str(date.today())
+            fecha_inicio=str(fecha_inicio)
         )
         session.add(p)
         session.commit()
@@ -614,6 +624,122 @@ elif menu == "Historial mensual":
     else:
         st.info("No hay pagos registrados aún")
 
+# =================================================
+# HISTORIAL CLIENTE
+# =================================================
+
+elif menu == "Historial cliente":
+
+    st.header("📋 Historial del cliente")
+
+    prestamos = session.query(Prestamo).all()
+
+    if prestamos:
+
+        opciones = {
+            f"{p.cliente} (ID {p.id})": p
+            for p in prestamos
+        }
+
+        seleccion = st.selectbox(
+            "Seleccionar cliente",
+            list(opciones.keys())
+        )
+
+        prestamo = opciones[seleccion]
+
+        deuda_interes, capital_real, interes_mensual = calcular_estado(
+            session,
+            prestamo.id
+        )
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
+            "Capital pendiente",
+            f"${capital_real:,.2f}"
+        )
+
+        col2.metric(
+            "Interés pendiente",
+            f"${deuda_interes:,.2f}"
+        )
+
+        col3.metric(
+            "Interés mensual",
+            f"${interes_mensual:,.2f}"
+        )
+
+        st.divider()
+
+        pagos = (
+            session.query(Pago)
+            .filter(Pago.prestamo_id == prestamo.id)
+            .order_by(Pago.fecha)
+            .all()
+        )
+
+        if pagos:
+
+            datos = []
+
+            total_capital = 0
+            total_interes = 0
+
+            for pago in pagos:
+
+                total_capital += pago.capital_pagado or 0
+                total_interes += pago.interes_pagado or 0
+
+                datos.append({
+                    "Fecha": pago.fecha,
+                    "Capital pagado": round(
+                        pago.capital_pagado or 0,
+                        2
+                    ),
+                    "Interés pagado": round(
+                        pago.interes_pagado or 0,
+                        2
+                    ),
+                    "Total pagado": round(
+                        pago.monto or 0,
+                        2
+                    )
+                })
+
+            st.subheader("💵 Pagos realizados")
+
+            df = pd.DataFrame(datos)
+
+            st.dataframe(
+                df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.divider()
+
+            col1, col2 = st.columns(2)
+
+            col1.metric(
+                "Capital abonado",
+                f"${total_capital:,.2f}"
+            )
+
+            col2.metric(
+                "Interés abonado",
+                f"${total_interes:,.2f}"
+            )
+
+        else:
+            st.info(
+                "Este cliente no tiene pagos registrados."
+            )
+
+    else:
+        st.info(
+            "No existen préstamos registrados."
+        )
 
 # =================================================
 # EDITAR PRÉSTAMO
@@ -715,7 +841,17 @@ elif menu == "Editar pago":
 elif menu == "Eliminar préstamo":
     prestamos = session.query(Prestamo).all()
 
-    opciones = {f"{p.cliente} (ID {p.id})": p.id for p in prestamos}
+    opciones = {
+    (
+        f"{p.cliente} | "
+        f"Fecha: {p.fecha_inicio} | "
+        f"Monto: ${p.capital_inicial:,.2f} | "
+        f"Pendiente: ${p.capital_actual:,.2f} | "
+        f"ID {p.id}"
+    ): p.id
+    for p in prestamos
+    }
+
 
     if opciones:
         sel = st.selectbox("Eliminar", list(opciones.keys()))

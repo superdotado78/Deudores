@@ -1,0 +1,15 @@
+Préstamo ID=7: capital_inicial=500.0, capital_actual=300.0, tasa=20.0, fecha_inicio=2026-02-26
+
+PAGOS:
+  ID=13, Fecha=2026-04-27, Monto=100.0, Capital=0.0, Interes=100.0
+  ID=15, Fecha=2026-05-06, Monto=100.0, Capital=0.0, Interes=100.0
+  ID=80, Fecha=2026-07-05, Monto=250.0, Capital=200.0, Interes=50.0
+
+CAMBIOS DE TASA:
+  ID=6, tasa=20.0, fecha_desde=2026-02-26
+  ID=45, tasa=10.0, fecha_desde=2026-05-26
+
+RESULTADO:
+  Capital real: 300.00
+  Interés pendiente: 50.00
+  Interés mensual: 30.00

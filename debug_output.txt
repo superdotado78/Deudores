@@ -1,0 +1,7 @@
+Fecha de corte: 2026-06-11
+Meses desde inicio hasta fecha_corte: 2
+Proxima fecha de pago: 2026-08-05
+meses_vencidos inicial: 2
+
+RESULTADO: deuda_interes=0, capital=203.2, int_mensual=40.64
+Esperado: deuda_interes=40.64

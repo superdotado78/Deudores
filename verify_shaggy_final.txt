@@ -1,0 +1,17 @@
+Today: 2026-07-11
+Shaggy ID=7, capital_inicial=500.0, capital_actual=300.0
+Fecha inicio: 2026-02-26
+Fecha corte: 2026-07-05
+Meses totales: 4
+Capital real: 300.0
+Interes pendiente: 50.0
+Interes mensual: 30.0
+
+Pagos (3):
+  2026-04-27: $100.0 (cap=0.0, int=100.0)
+  2026-05-06: $100.0 (cap=0.0, int=100.0)
+  2026-07-05: $250.0 (cap=200.0, int=50.0)
+
+Tasas (2):
+  20.0% desde 2026-02-26
+  10.0% desde 2026-05-26

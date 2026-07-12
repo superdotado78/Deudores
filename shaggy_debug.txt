@@ -1,0 +1,30 @@
+capital_inicial=500.0
+total_capital_pagado=200.0
+capital_real=300.0
+
+fecha_corte=2026-07-05
+
+meses_vencidos (hasta fecha_corte)=4
+meses_vencidos (hasta hoy)=4
+meses_vencidos (final)=4
+
+Pagos de capital encontrados: 1
+  ID=80, Fecha=2026-07-05, Capital=200.0
+
+Periodos calculados:
+  Periodo 1: fecha=2026-03-26, cap_hasta_ahora=0.0, capital_acum=0.0, capital_periodo=500.0, tasa=20.0%, interes=100.0
+  Periodo 2: fecha=2026-04-26, cap_hasta_ahora=0.0, capital_acum=0.0, capital_periodo=500.0, tasa=20.0%, interes=100.0
+  Periodo 3: fecha=2026-05-26, cap_hasta_ahora=0.0, capital_acum=0.0, capital_periodo=500.0, tasa=10.0%, interes=50.0
+  Periodo 4: fecha=2026-06-26, cap_hasta_ahora=0.0, capital_acum=0.0, capital_periodo=500.0, tasa=10.0%, interes=50.0
+
+Pagos de interes:
+  Fecha=2026-04-27, Interes=100.0
+  Fecha=2026-05-06, Interes=100.0
+  Fecha=2026-07-05, Interes=50.0
+
+Saldos antes de aplicar pagos: [100.0, 100.0, 50.0, 50.0]
+Saldos despues de aplicar pagos: [0.0, 0.0, 0.0, 50.0]
+
+Deuda interes final: 50.0
+
+calcular_estado oficial: deuda=50.0, capital=300.0, mensual=30.0
