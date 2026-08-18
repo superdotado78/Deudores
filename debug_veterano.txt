@@ -1,0 +1,43 @@
+=== ALL LOANS AFTER FIX ===
+Hoy: 2026-07-19
+
+ID  1: vivi                 | Capital:  500.00 | Int.pend:  200.00 | Int.mens:  100.00 | Pagos: 2
+ID  2: Maricela             | Capital:  300.00 | Int.pend:    0.00 | Int.mens:   45.00 | Pagos: 2
+ID  3: Alanis               | Capital:  500.00 | Int.pend:  300.00 | Int.mens:  100.00 | Pagos: 1
+ID  5: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID  6: Sra Angela           | Capital:  500.00 | Int.pend:  400.00 | Int.mens:  100.00 | Pagos: 1
+ID  7: Shaggy               | Capital:  300.00 | Int.pend:  100.00 | Int.mens:   30.00 | Pagos: 3
+ID  8: Sra Gladys           | Capital:  500.00 | Int.pend:  100.00 | Int.mens:  100.00 | Pagos: 3
+ID  9: Sra Gladys           | Capital:  200.00 | Int.pend:   40.00 | Int.mens:   40.00 | Pagos: 1
+ID 10: Veterano             | Capital:  700.00 | Int.pend:   20.00 | Int.mens:   70.00 | Pagos: 3
+ID 11: STEFANIA DELGADO     | Capital:  200.00 | Int.pend:   40.00 | Int.mens:   40.00 | Pagos: 1
+ID 12: Xavier Gomez         | Capital:  300.00 | Int.pend:   60.00 | Int.mens:   60.00 | Pagos: 0
+ID 13: Test                 | Capital:  100.00 | Int.pend:   10.00 | Int.mens:   10.00 | Pagos: 1
+ID 14: Test                 | Capital:  100.00 | Int.pend:   10.00 | Int.mens:   10.00 | Pagos: 1
+ID 15: Test                 | Capital:  100.00 | Int.pend:   10.00 | Int.mens:   10.00 | Pagos: 1
+ID 16: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 17: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 18: David Fuentes        | Capital:  247.20 | Int.pend:  114.24 | Int.mens:   49.44 | Pagos: 1
+ID 19: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 20: David Fuentes        | Capital:  247.20 | Int.pend:  114.24 | Int.mens:   49.44 | Pagos: 1
+ID 21: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 22: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 23: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 25: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 26: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 28: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 32: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 33: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 35: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 36: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 38: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 39: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 41: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 42: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 43: Maricela             | Capital:  400.00 | Int.pend:   60.00 | Int.mens:   60.00 | Pagos: 1
+ID 44: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 45: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 46: Maricela             | Capital:  400.00 | Int.pend:   60.00 | Int.mens:   60.00 | Pagos: 1
+ID 47: Test2                | Capital:    0.00 | Int.pend:   10.00 | Int.mens:    0.00 | Pagos: 1
+ID 48: David Fuentes        | Capital:  203.20 | Int.pend:   40.64 | Int.mens:   40.64 | Pagos: 2
+ID 49: Maricela             | Capital:  400.00 | Int.pend:   60.00 | Int.mens:   60.00 | Pagos: 1

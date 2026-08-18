@@ -160,6 +160,13 @@ class TasaPorPeriodoTests(unittest.TestCase):
         finally:
             session.close()
 
+    def test_preparar_menu_fuerza_el_resumen_en_el_estado(self):
+        state = {}
+
+        app.preparar_menu("Resumen", state=state)
+
+        self.assertEqual(state["menu"], "Resumen")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,7 +14,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 database_url = os.environ.get("DATABASE_URL")
 
 if not database_url:
-    database_url = "sqlite:///prestamos.db"
+    proyecto_root = os.path.dirname(os.path.abspath(__file__))
+    database_url = f"sqlite:///{os.path.join(proyecto_root, 'prestamos.db')}"
 
 if database_url.startswith("postgres://"):
     database_url = database_url.replace("postgres://", "postgresql://", 1)
@@ -25,6 +26,15 @@ if database_url.startswith("sqlite"):
         database_url,
         connect_args={"check_same_thread": False}
     )
+    db_source = "SQLite local"
+elif database_url.startswith("postgres://") or database_url.startswith("postgresql://"):
+    engine = create_engine(
+        database_url,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        connect_args={"sslmode": "require"},
+    )
+    db_source = "Postgres/Supabase"
 else:
     engine = create_engine(
         database_url,
@@ -32,6 +42,7 @@ else:
         pool_recycle=300,
         connect_args={"sslmode": "require"},
     )
+    db_source = "Base de datos externa"
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -231,8 +242,19 @@ def aplicar_pagos_a_intereses(periodos, pagos):
         if monto <= 0:
             continue
 
+        # Encontrar el periodo que corresponde a esta fecha de pago
+        # Se asigna al periodo con la fecha de vencimiento mas cercana
+        # (funciona tanto para pagos adelantados como atrasados)
+        periodo_idx = 0
+        min_diff = float('inf')
+        for idx, (fecha_periodo, _) in enumerate(periodos):
+            diff = abs((fecha_periodo - fecha_pago).days)
+            if diff < min_diff:
+                min_diff = diff
+                periodo_idx = idx
+
         restante_pago = float(monto)
-        for idx in range(len(periodos)):
+        for idx in range(periodo_idx, len(periodos)):
             if restante_pago <= 0:
                 break
             if saldos[idx] <= 0:
@@ -282,6 +304,12 @@ def calcular_estado(session, prestamo_id):
 
     if fecha_corte and fecha_corte < date.today():
         meses_vencidos = max(meses_vencidos, meses_totales(str(fecha_inicio), date.today()))
+
+    # Incluir el periodo actual (mes en curso) para que los pagos
+    # realizados antes de la fecha de vencimiento se asignen a su periodo
+    # correspondiente y no se apliquen FIFO a deudas anteriores
+    meses_a_calcular = meses_vencidos + 1
+
     periodos = []
     pagos_capital = session.query(Pago).filter(
         Pago.prestamo_id == prestamo_id,
@@ -289,7 +317,7 @@ def calcular_estado(session, prestamo_id):
     ).order_by(Pago.fecha).all()
 
     capital_acumulado = 0.0
-    for i in range(meses_vencidos):
+    for i in range(meses_a_calcular):
         periodo = add_months(fecha_inicio, i + 1)
 
         capital_acumulado += capital_pagado_hasta_periodo(pagos_capital, periodo) - capital_acumulado
@@ -308,7 +336,9 @@ def calcular_estado(session, prestamo_id):
         pagos.append((date.fromisoformat(pago.fecha), float(pago.interes_pagado or 0)))
 
     saldos = aplicar_pagos_a_intereses(periodos, pagos)
-    deuda_interes = sum(max(0, saldo) for saldo in saldos)
+
+    # Solo contar periodos vencidos en la deuda (excluir el periodo actual/buffer)
+    deuda_interes = sum(max(0, saldo) for saldo in saldos[:meses_vencidos])
 
     return deuda_interes, capital_real, interes_mensual
 
@@ -329,7 +359,9 @@ def aplicar_pago(session, prestamo_id, monto_capital, monto_interes, fecha_pago)
 
     p = session.get(Prestamo, prestamo_id)
     if p and p.capital_actual == 0:
-        session.delete(p)
+        # Mantener el registro del préstamo (marcar como pagado) en lugar de eliminarlo.
+        # Así se preservan los pagos en el historial y en las métricas mensuales.
+        p.capital_actual = 0
         session.commit()
         return True
 
@@ -351,15 +383,21 @@ st.set_page_config(page_title="Sistema de Préstamos", layout="wide")
 st.title("💰 Sistema de Préstamos")
 
 
+def preparar_menu(nuevo_menu, state=None):
+    target_state = st.session_state if state is None else state
+    target_state["menu"] = nuevo_menu
+    return nuevo_menu
+
+
 def ir_a_menu(nuevo_menu):
-    st.session_state["menu"] = nuevo_menu
+    preparar_menu(nuevo_menu)
     st.rerun()
 
 
 if "menu" not in st.session_state:
     st.session_state["menu"] = "Resumen"
 
-menu = st.sidebar.radio("Menú", [
+menu_options = [
     "Resumen",
     "Nuevo préstamo",
     "Registrar pago",
@@ -368,7 +406,12 @@ menu = st.sidebar.radio("Menú", [
     "Editar préstamo",
     "Editar pago",
     "Eliminar préstamo",
-], key="menu")
+]
+
+menu = st.sidebar.radio("Menú", menu_options, key="menu")
+if menu != st.session_state.get("menu"):
+    st.session_state["menu"] = menu
+menu = st.session_state["menu"]
 
 session = get_session()
 
@@ -398,16 +441,21 @@ if menu == "Resumen":
     for p, prox_fecha in prestamos_con_fecha:
         deuda_interes, capital_real, interes_mensual = calcular_estado(session, p.id)
 
+        # Omitir préstamos cuyo total (capital + interés) sea cero
+        total_prestamo = (capital_real or 0) + (deuda_interes or 0)
+        if total_prestamo <= 0:
+            continue
+
         data.append({
             "Cliente": p.cliente,
             "Fecha de pago": prox_fecha.strftime("%Y-%m-%d"),
             "Capital": round(capital_real, 2),
             "Interés mensual": round(interes_mensual, 2),
             "Interés pendiente": round(deuda_interes, 2),
-            "Total deuda": round(capital_real + deuda_interes, 2)
+            "Total deuda": round(total_prestamo, 2)
         })
 
-        total_deuda += capital_real + deuda_interes
+        total_deuda += total_prestamo
         total_interes_mensual += interes_mensual
 
     total_recaudado_mes = session.query(func.sum(Pago.monto)).filter(
@@ -419,11 +467,14 @@ if menu == "Resumen":
     col1.metric("💵 Ganancia mensual", f"${total_interes_mensual:,.2f}")
     col2.metric("📥 Recaudado este mes", f"${total_recaudado_mes:,.2f}")
     col3.metric("📊 Deuda total", f"${total_deuda:,.2f}")
+    st.caption(f"Conectado a: {db_source}")
 
     if data:
         df = pd.DataFrame(data)
         df.insert(0, "#", range(1, len(df) + 1))
         st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No hay préstamos con deuda pendiente.")
     else:
         st.info("No hay préstamos registrados aún.")
 
@@ -509,7 +560,7 @@ elif menu == "Registrar pago":
             if st.button("Aplicar pago"):
                 eliminado = aplicar_pago(session, pid, cap, intp, fecha)
                 if eliminado:
-                    st.success("Préstamo eliminado")
+                    st.success("Préstamo liquidado")
                 else:
                     st.success("Pago registrado")
 
@@ -526,7 +577,7 @@ elif menu == "Registrar pago":
                 int_total = estado.get('deuda_interes', 0.0)
                 eliminado = aplicar_pago(session, pid, cap_total, int_total, fecha)
                 if eliminado:
-                    st.success("Préstamo eliminado")
+                    st.success("Préstamo liquidado")
                 else:
                     st.success("Pago total registrado")
 
