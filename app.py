@@ -475,8 +475,7 @@ if menu == "Resumen":
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("No hay préstamos con deuda pendiente.")
-    else:
-        st.info("No hay préstamos registrados aún.")
+
 
 
 # =================================================
